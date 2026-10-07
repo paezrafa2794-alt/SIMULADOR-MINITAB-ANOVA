@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Minitab Simulador – ANOVA</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#e9edf2;--pn:#fff;--tx:#111;--bd:#9aa5b1;--hd:#d5dde6;--mb:#f3f3f3;--ac:#1f5fa8}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#20262d;--pn:#161b21;--tx:#e6e6e6;--bd:#4a5560;--hd:#2c3640;--mb:#2a2f36;--ac:#6aa8ee}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:13px Segoe UI,Arial,sans-serif;background-color:var(--bg)}
+#mb{display:flex;background:var(--mb);border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.m{position:relative;padding:5px 12px;cursor:default}.m:hover{background:var(--hd)}
+.dd{display:none;position:absolute;left:0;top:100%;background:var(--pn);border:1px solid var(--bd);z-index:9;min-width:250px;box-shadow:2px 2px 6px #0004}
+.m:hover .dd{display:block}.dd div{padding:6px 12px;cursor:pointer}.dd div:hover{background:var(--ac);color:#fff}
+.t{padding:5px 10px;background:var(--hd);font-weight:600;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center}
+#ses{height:46vh;overflow:auto;margin:0;padding:8px;background:var(--pn);font:12px Consolas,monospace;white-space:pre}
+#ws{overflow:auto;background:var(--pn);max-height:34vh}
+.ft td,.ft th{min-width:46px;padding:2px 4px;text-align:center;position:static}.hl{background:var(--ac)!important;color:#fff}
+table{border-collapse:collapse}td,th{border:1px solid var(--bd);padding:0;min-width:90px;text-align:right}
+th{background:var(--hd);font-weight:600;padding:3px 8px;text-align:center;position:sticky;top:0}
+td.r{background:var(--hd);min-width:34px;text-align:center;padding:2px 6px}
+th input.h{width:84px;text-align:center;font-weight:600;border:0;background:transparent;color:var(--tx);font:inherit}.t input{font:inherit;background:var(--pn);color:var(--tx);border:1px solid var(--bd);padding:2px 4px}
+td input{width:100%;border:0;padding:3px 6px;text-align:right;background:transparent;color:var(--tx);font:inherit}td input:focus{outline:2px solid var(--ac);outline-offset:-2px}
+button,select,input[type=number]{font:inherit;background:var(--mb);color:var(--tx);border:1px solid var(--bd);padding:3px 10px}
+button{cursor:pointer}
+#dlg{display:none;position:fixed;inset:0;background:#0006;z-index:20;align-items:center;justify-content:center}
+#dlg>div{background:var(--pn);border:1px solid var(--bd);min-width:280px;max-width:92vw}#dlg p{margin:10px 14px}
+canvas{display:block;background:#fff;max-width:100%;border:1px solid var(--bd)}
+</style></head><body>
+<div id="mb">
+<div class="m">Archivo<div class="dd"><div onclick="clr()">Nueva hoja de trabajo</div><div onclick="demo()">Abrir datos de ejemplo (papas)</div><div onclick="ses.textContent=''">Limpiar ventana Sesión</div></div></div>
+<div class="m">Datos<div class="dd"><div onclick="addRow()">Agregar fila (réplica)</div><div onclick="addLevel()">Agregar nivel (columna)</div><div onclick="delLevel()">Quitar último nivel</div><div onclick="delRow()">Quitar última fila</div></div></div>
+<div class="m">Calc<div class="dd"><div onclick="rnd()">Datos aleatorios &gt; Muestreo por columnas…</div><div onclick="tabla1()">Tabla 1a/1b: Totales y promedios</div></div></div>
+<div class="m">Estadísticas<div class="dd"><div onclick="dlg('anova')">ANOVA &gt; Un solo factor (sin apilar)…</div><div onclick="ftabla()">Tablas &gt; Tabla F de Fisher…</div><div onclick="desc()">Estadísticas básicas &gt; Mostrar estadísticas descriptivas</div></div></div>
+<div class="m">Gráfica<div class="dd"><div onclick="plot('box')">Diagrama de caja</div><div onclick="plot('ind')">Gráfica de valores individuales</div></div></div>
+</div>
+<div class="t">Sesión</div><pre id="ses"></pre>
+<div class="t">Hoja de trabajo 1 *** <span>Factor: <input id="fac" value="Factor" size="9" oninput="FAC=this.value"> Respuesta: <input id="resp" value="Respuesta" size="9" oninput="RESP=this.value"> <button onclick="addLevel()">+ nivel</button> <button onclick="delLevel()">− nivel</button> <button onclick="addRow()">+ fila</button> <button onclick="demo()">Ejemplo</button></span></div>
+<div id="ws"></div>
+<div id="plan" style="padding:8px;overflow:auto"></div>
+<div id="ftab" style="padding:8px;overflow:auto"></div>
+<div id="cv" style="padding:8px;overflow:auto"></div>
+<div id="dlg"><div><div class="t">ANOVA de un solo factor<button onclick="dlg()">✕</button></div>
+<p id="dl"></p>
+<p>Nivel de significancia α: <select id="al"><option>0.10<option selected>0.05<option>0.01</select></p>
+<p style="text-align:right"><button onclick="dlg();anova(+al.value)">Aceptar</button></p></div></div>
+<script>
+let N=['A','B','C','D'],R=4,D=N.map(()=>Array(R).fill('')),ORD=[],FAC='Factor',RESP='Respuesta';
+const $=id=>document.getElementById(id),ses=$('ses'),al=$('al');
+function log(s){ses.textContent+=s+'\n';ses.scrollTop=1e9}
+function dlg(k){if(k)$('dl').textContent='Respuesta: '+RESP+' | Niveles: '+N.map((n,i)=>'C'+(i+1)+' '+n).join(', ');$('dlg').style.display=k?'flex':'none'}
+function render(){let h='<table><tr><th></th>'+N.map((n,i)=>`<th>C${i+1}<br><input class="h" value="${n}" oninput="N[${i}]=this.value"></th>`).join('')+'</tr>';
+for(let r=0;r<R;r++){h+=`<tr><td class="r">${r+1}</td>`+N.map((n,i)=>`<td><input value="${D[i][r]}" oninput="D[${i}][${r}]=this.value" inputmode="decimal"></td>`).join('')+'</tr>'}
+$('ws').innerHTML=h+'</table>';
+$('plan').innerHTML=ORD.length?'<b>Plan de ejecución (orden aleatorio)</b><br><table><tr><th>Ejecutar en lugar</th>'+ORD.map((o,i)=>`<td class="r">${i+1}</td>`).join('')+'</tr><tr><th>Corrida (nivel-réplica)</th>'+ORD.map(o=>`<td class="r">${o}</td>`).join('')+'</tr></table>':''}
+function addRow(){R++;D.forEach(c=>c.push(''));render()}
+function addLevel(){N.push(String.fromCharCode(65+N.length%26));D.push(Array(R).fill(''));render()}
+function delLevel(){if(N.length>2){N.pop();D.pop();render()}}
+function delRow(){if(R>1){R--;D.forEach(c=>c.pop());render()}}
+function clr(){R=4;ORD=[];D=N.map(()=>Array(R).fill(''));ORD=[];render();log('Hoja nueva.')}
+function demo(){const x=[[26.1,26.4,25.9,26.3],[27.8,28.1,27.6,28.0],[24.9,25.2,25.0,24.7],[26.9,27.3,27.1,26.8]];N=['A','B','C','D'];FAC='Marca';RESP='Peso (g)';$('fac').value=FAC;$('resp').value=RESP;R=4;ORD=[];D=x.map(c=>c.map(String));render();log('Datos de ejemplo cargados (ficticios). Cambia el nombre del factor, la respuesta y los niveles, y captura tus propios datos.')}
+function G(){return D.map(c=>c.map(v=>parseFloat(v)).filter(v=>isFinite(v)))}
+const f=(x,d=4)=>isFinite(x)?x.toFixed(d):'*',p=(s,w)=>String(s).padStart(w),q=(s,w)=>String(s).padEnd(w);
+function mean(a){return a.reduce((s,v)=>s+v,0)/a.length}
+function sd(a){const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1))}
+function rnd(){const n=R*N.length,P=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.random()*(i+1)|0;[P[i],P[j]]=[P[j],P[i]]}
+ORD=P.map(i=>N[Math.floor(i/R)]+'-'+(i%R+1));
+log('MTB > Calc > Datos aleatorios > Muestreo por columnas\nMuestra de '+n+' corridas ('+N.length+' niveles × '+R+' réplicas)'+' sin reemplazo.\nOrden aleatorio de ejecución (nivel-réplica):\n  '+ORD.map((o,i)=>(i+1)+':'+o).join('  '));render()}
+let LAST=null;
+function ftabla(a){a=a||+al.value;const C=[1,2,3,4,5,6,7,8,9,10,12,15,20,24,30,40,60,120],Rr=[...Array(30).keys()].map(i=>i+1).concat([40,60,120,1e7]);
+let ri=-1,ci=-1;if(LAST){ci=C.indexOf(LAST.d1);const cd=Rr.filter(v=>v<=LAST.d2);ri=Rr.indexOf(cd[cd.length-1])}
+let h='<b>Tabla F de Fisher</b> &nbsp; α = <select onchange="ftabla(+this.value)">'+[.1,.05,.01].map(x=>`<option${x==a?' selected':''}>${x}</option>`).join('')+'</select> &nbsp; Columnas: gl numerador (k−1). Filas: gl denominador (N−k).<br><table class="ft"><tr><th>gl₂ ↓ / gl₁ →</th>'+C.map((c,j)=>`<th${j==ci?' class="hl"':''}>${c}</th>`).join('')+'</tr>';
+Rr.forEach((r,i)=>{h+=`<tr><th${i==ri?' class="hl"':''}>${r>1e6?'∞':r}</th>`+C.map((c,j)=>`<td${i==ri&&j==ci?' class="hl"':''}>${Fcrit(a,c,r).toFixed(2)}</td>`).join('')+'</tr>'});
+h+='</table>';
+if(LAST){const fc=Fcrit(a,LAST.d1,LAST.d2);h+=`<p>Tu ANOVA: gl = (${LAST.d1}, ${LAST.d2}). F calculada = <b>${f(LAST.F,4)}</b>. F de tabla (α=${a}) = <b>${f(fc,4)}</b> → ${LAST.F>fc?'F &gt; F tabla: se <b>rechaza H₀</b>':'F ≤ F tabla: <b>no se rechaza H₀</b>'}.${Rr[ri]!=LAST.d2||ci<0?' (La fila o columna exacta no aparece en la tabla impresa; se resalta la más cercana, y el valor de arriba es el exacto.)':''}</p>`}
+else h+='<p>Corre el ANOVA para resaltar tu celda y comparar con la F calculada.</p>';
+$('ftab').innerHTML=h}
+function tabla1(){const g=G();if(!g.some(a=>a.length))return log('* ERROR * No hay datos.');
+log('\nTabla 1a. Corridas experimentales / Tabla 1b. Notación\n'+q(FAC,12)+g.map((_,i)=>p('y'+(i+1)+'j',8)).join('')+'\n');
+let gt=0,gn=0;g.forEach((a,i)=>{const s=a.reduce((x,y)=>x+y,0);gt+=s;gn+=a.length;log(q(N[i],12)+a.map(v=>p(f(v,2),8)).join('')+'  Total='+f(s,2)+'  Prom='+f(mean(a),4))});
+log('Gran total y.. = '+f(gt,2)+'   Promedio total ȳ.. = '+f(gt/gn,4))}
+function desc(){const g=G();log('\nEstadísticas descriptivas: '+N.join(', ')+'\n'+q('Variable',10)+p('N',4)+p('Media',10)+p('Desv.Est.',11)+p('Mín',9)+p('Máx',9));
+g.forEach((a,i)=>a.length&&log(q(N[i],10)+p(a.length,4)+p(f(mean(a)),10)+p(a.length>1?f(sd(a)):'*',11)+p(f(Math.min(...a),2),9)+p(f(Math.max(...a),2),9)))}
+function lg(z){const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,.1208650973866179e-2,-.5395239384953e-5];let y=z,t=z+5.5;t-=(z+.5)*Math.log(t);let s=1.000000000190015;for(const k of c)s+=k/++y;return -t+Math.log(2.5066282746310005*s/z)}
+function bc(a,b,x){let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;d=1/(Math.abs(d)<1e-30?1e-30:d);let h=d;for(let m=1;m<300;m++){let m2=2*m,aa=m*(b-m)*x/((qam+m2)*(a+m2));d=1+aa*d;d=1/(Math.abs(d)<1e-30?1e-30:d);c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;h*=d*c;aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));d=1+aa*d;d=1/(Math.abs(d)<1e-30?1e-30:d);c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;const de=d*c;h*=de;if(Math.abs(de-1)<3e-12)break}return h}
+function ib(x,a,b){if(x<=0)return 0;if(x>=1)return 1;const bt=Math.exp(lg(a+b)-lg(a)-lg(b)+a*Math.log(x)+b*Math.log(1-x));return x<(a+1)/(a+b+2)?bt*bc(a,b,x)/a:1-bt*bc(b,a,1-x)/b}
+const Fc=(x,a,b)=>ib(a*x/(a*x+b),a/2,b/2);
+function Fcrit(al,a,b){let lo=0,hi=1e4;for(let i=0;i<70;i++){const m=(lo+hi)/2;Fc(m,a,b)<1-al?lo=m:hi=m}return(lo+hi)/2}
+function anova(a){const g=G(),ix=g.map((x,i)=>i).filter(i=>g[i].length);const k=ix.length,gs=ix.map(i=>g[i]),n=gs.map(x=>x.length),Nt=n.reduce((x,y)=>x+y,0);
+if(k<2||Nt<=k)return log('* ERROR * Se necesitan al menos 2 niveles y más observaciones que niveles.');
+const ms=gs.map(mean),gm=gs.flat().reduce((x,y)=>x+y,0)/Nt;
+const SSTr=gs.reduce((s,_,i)=>s+n[i]*(ms[i]-gm)**2,0),SSE=gs.reduce((s,x,i)=>s+x.reduce((u,v)=>u+(v-ms[i])**2,0),0),SST=SSTr+SSE;
+const d1=k-1,d2=Nt-k,M1=SSTr/d1,M2=SSE/d2,F=M1/M2,P=1-Fc(F,d1,d2),fc=Fcrit(a,d1,d2),S=Math.sqrt(M2);LAST={d1,d2,F};
+const nm=ix.map(i=>N[i]);
+log('\nMTB > ANOVA unidireccional: '+nm.join(', ')+'\n\nMétodo\n  Hipótesis nula          H₀: todas las medias son iguales\n  Hipótesis alterna       H₁: no todas las medias son iguales\n  Nivel de significancia  α = '+a+'\n\nInformación del factor\n  Factor  Niveles  Valores\n  '+q(FAC,8)+p(k,7)+'  '+nm.join(', ')+'\n');
+log('Tabla 2. Resultados (Análisis de Varianza)\nFuente   GL  SC Ajust.  MC Ajust.  Valor F  Valor p\n'+q('Entre',7)+p(d1,4)+p(f(SSTr),11)+p(f(M1),11)+p(f(F,2),9)+p(f(P,4),9)+'\n'+q('Dentro',7)+p(d2,4)+p(f(SSE),11)+p(f(M2),11)+'\n'+q('Total',7)+p(Nt-1,4)+p(f(SST),11));
+log('\nResumen del modelo\n  S = '+f(S)+'   R-cuad. = '+f(100*SSTr/SST,2)+'%   R-cuad.(ajust) = '+f(100*(1-(SSE/d2)/(SST/(Nt-1))),2)+'%\n\nMedias\n'+q(FAC,12)+'  N     Media  Desv.Est.\n'+nm.map((c,i)=>q(c,12)+p(n[i],3)+p(f(ms[i]),10)+p(n[i]>1?f(sd(gs[i])):'*',11)).join('\n')+'\n  Media global = '+f(gm));
+log('\nComparación con la tabla F de Fisher\n  F calculada = '+f(F,4)+'\n  F crítica (α='+a+'; '+d1+', '+d2+' gl) = '+f(fc,4));
+log(F>fc?'  DECISIÓN: F > Fcrítica (p = '+f(P,4)+' < α) → se RECHAZA H₀.\n  Hay diferencia significativa en la media de '+RESP+' entre al menos dos niveles de '+FAC+'.':'  DECISIÓN: F ≤ Fcrítica (p = '+f(P,4)+' ≥ α) → NO se rechaza H₀.\n  No hay evidencia suficiente de diferencia entre los niveles de '+FAC+'.');
+log('\nComprobación: SSTr + SSE = '+f(SSTr+SSE)+' = SST ✔');log('La Tabla F de Fisher aparece debajo de la hoja de trabajo, con tu celda resaltada.');ftabla(a)}
+function plot(t){const g=G(),ix=g.map((x,i)=>i).filter(i=>g[i].length);if(!ix.length)return log('* ERROR * No hay datos.');
+const all=g.flat(),mn=Math.min(...all),mx=Math.max(...all),pd=(mx-mn||1)*.15,lo=mn-pd,hi=mx+pd,W=520,H=340,L=60,B=40,T=30;
+$('cv').innerHTML='<canvas id="c" width="'+W+'" height="'+H+'"></canvas>';const c=$('c').getContext('2d');
+const Y=v=>H-B-(v-lo)/(hi-lo)*(H-B-T);c.fillStyle='#000';c.font='12px Arial';c.textAlign='center';
+c.fillText(t=='box'?'Diagrama de caja de '+RESP+' por '+FAC:'Gráfica de valores individuales de '+RESP+' por '+FAC,W/2,16);
+c.strokeStyle='#bbb';for(let i=0;i<=5;i++){const v=lo+(hi-lo)*i/5;c.beginPath();c.moveTo(L,Y(v));c.lineTo(W-10,Y(v));c.stroke();c.textAlign='right';c.fillText(v.toFixed(2),L-5,Y(v)+4)}
+c.strokeStyle='#000';c.strokeRect(L,T,W-10-L,H-B-T);const sw=(W-10-L)/ix.length;
+const qt=(a,p)=>{const s=[...a].sort((x,y)=>x-y),i=(s.length-1)*p,j=Math.floor(i);return s[j]+(s[Math.min(j+1,s.length-1)]-s[j])*(i-j)};
+ix.forEach((i,k)=>{const x=L+sw*(k+.5),a=g[i];c.fillStyle='#000';c.textAlign='center';c.fillText(N[i],x,H-B+16);
+if(t=='box'){const q1=qt(a,.25),q3=qt(a,.75),md=qt(a,.5);c.strokeStyle='#1f5fa8';c.fillStyle='#cfe0f5';c.fillRect(x-25,Y(q3),50,Y(q1)-Y(q3));c.strokeRect(x-25,Y(q3),50,Y(q1)-Y(q3));
+c.beginPath();c.moveTo(x-25,Y(md));c.lineTo(x+25,Y(md));c.moveTo(x,Y(q3));c.lineTo(x,Y(Math.max(...a)));c.moveTo(x,Y(q1));c.lineTo(x,Y(Math.min(...a)));c.stroke()}
+else{c.fillStyle='#c0392b';a.forEach((v,j)=>{c.beginPath();c.arc(x+(j%3-1)*6,Y(v),3.5,0,7);c.fill()})}
+c.fillStyle='#000';c.beginPath();c.arc(x,Y(mean(a)),4,0,7);c.strokeStyle='#000';c.stroke()});
+c.save();c.translate(14,H/2);c.rotate(-Math.PI/2);c.textAlign='center';c.fillStyle='#000';c.fillText(RESP,0,0);c.restore();
+log('Gráfica generada abajo ('+(t=='box'?'diagrama de caja':'valores individuales')+'; ● = media). Toma captura de pantalla para tu reporte.')}
+log('Minitab Simulador (educativo) – ANOVA de un solo factor / Diseño completamente aleatorio\nHoja de trabajo: k niveles (columnas) × n réplicas (filas). Nombra el factor, la respuesta y los niveles; agrega niveles o filas y captura tus datos.\nFlujo: Calc > Muestreo por columnas → Calc > Tabla 1a → Estadísticas > ANOVA → Gráfica.\n');render();
+</script></body></html>
